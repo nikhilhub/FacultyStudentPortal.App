@@ -1,0 +1,154 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Student Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2 class="text-center mb-4 fw-bold">📚 Student Dashboard</h2>
+
+        <!-- Student Info -->
+        <div class="card p-3 mb-4">
+            <h5>👤 Logged in as: <span id="studentName"></span> (<span id="studentEmail"></span>)</h5>
+        </div>
+
+        <!-- Assignments -->
+        <div class="card p-3 mb-4">
+            <h4>📝 Available Assignments</h4>
+            <table class="table table-striped mt-3" id="assignmentTable">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Description</th>
+                        <th>Due Date</th>
+                        <th>Upload File</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- Charts -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card p-3">
+                    <h5 class="text-center">📈 Your Total Score (Line Chart)</h5>
+                    <canvas id="lineChart" height="300"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card p-3">
+                    <h5 class="text-center">📊 Your Total Score (Pie Chart)</h5>
+                    <canvas id="pieChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const apiBase = "https://localhost:7266/api/AssignmentApi";
+        const currentStudent = {
+            fullName: "John Doe", // Replace with actual server-side value
+            email: "johndoe@example.com",
+            studentId: 123 // Replace with actual server-side ID
+        };
+
+        $(function () {
+            $('#studentName').text(currentStudent.fullName);
+            $('#studentEmail').text(currentStudent.email);
+
+            function loadAssignments() {
+                $.get(`${apiBase}/get-assignment`, function (assignments) {
+                    const tbody = $('#assignmentTable tbody');
+                    tbody.empty();
+                    if (!assignments.length) {
+                        tbody.append('<tr><td colspan="4" class="text-center">No assignments available.</td></tr>');
+                        return;
+                    }
+                    assignments.forEach(a => {
+                        tbody.append(`
+                            <tr>
+                                <td>${a.title}</td>
+                                <td>${a.description}</td>
+                                <td>${new Date(a.dueDate).toLocaleString()}</td>
+                                <td>
+                                    <form class="uploadForm" data-assignment-id="${a.assignmentId}" enctype="multipart/form-data">
+                                        <input type="file" name="file" class="form-control mb-2" required />
+                                        <button type="submit" class="btn btn-sm btn-success">Upload</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        `);
+                    });
+                });
+            }
+
+            loadAssignments();
+
+            $(document).on('submit', '.uploadForm', function (e) {
+                e.preventDefault();
+                const form = $(this);
+                const assignmentId = form.data('assignment-id');
+                const fileInput = form.find('input[type="file"]')[0];
+                const file = fileInput.files[0];
+                if (!file) return alert("Please select a file.");
+
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("assignmentId", assignmentId);
+                formData.append("studentId", currentStudent.studentId);
+
+                $.ajax({
+                    url: `${apiBase}/upload-assignment`,
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false
+                }).done(res => alert(res.message))
+                  .fail(err => alert("Upload failed: " + (err.responseJSON?.error || "Unknown")));
+            });
+
+            $.get(`${apiBase}/performance-data/${currentStudent.studentId}`, function (data) {
+                if (!data || data.length === 0) return;
+
+                const assignmentLabels = data.map(x => x.assignmentTitle);
+                const scores = data.map(x => x.totalScore);
+
+                const colors = scores.map(() => `hsl(${Math.random() * 360}, 60%, 70%)`);
+
+                new Chart(document.getElementById('lineChart'), {
+                    type: 'line',
+                    data: {
+                        labels: assignmentLabels,
+                        datasets: [{
+                            label: "Scores",
+                            data: scores,
+                            borderColor: "#007bff",
+                            backgroundColor: "rgba(0, 123, 255, 0.2)",
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    }
+                });
+
+                new Chart(document.getElementById('pieChart'), {
+                    type: 'pie',
+                    data: {
+                        labels: assignmentLabels,
+                        datasets: [{
+                            data: scores,
+                            backgroundColor: colors
+                        }]
+                    }
+                });
+            });
+        });
+    </script>
+  
+</body>
+</html>

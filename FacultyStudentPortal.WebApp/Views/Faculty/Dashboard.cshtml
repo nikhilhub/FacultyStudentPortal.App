@@ -1,0 +1,365 @@
+﻿
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Faculty Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            background-color: #f4f6f9;
+        }
+
+        .dashboard-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h2 class="text-center mb-5 fw-bold">📊 Faculty Dashboard</h2>
+
+        <!-- Student Listing -->
+        <div class="dashboard-card">
+            <h4>👨‍🎓 Student List</h4>
+            <ul class="list-group" id="studentList"></ul>
+        </div>
+
+        <!-- Assignment Management -->
+        <div class="dashboard-card">
+            <h4>
+                📝 Assignments
+                <button id="toggleAssignmentForm" class="btn btn-sm btn-primary float-end">+ Add Assignment</button>
+            </h4>
+
+            <!-- Assignment List Table -->
+            <table class="table table-striped mt-3" id="assignmentTable">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Description</th>
+                        <th>Due Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Dynamically filled -->
+                </tbody>
+            </table>
+
+            <!-- Hidden Assignment Creation Form -->
+            <form id="assignmentForm" class="mt-4" style="display:none;">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" placeholder="Title" id="title" required />
+                    </div>
+                    <div class="col-md-6">
+                        <input type="datetime-local" class="form-control" id="dueDate" required />
+                    </div>
+                    <div class="col-12">
+                        <textarea class="form-control" placeholder="Description" id="description" rows="2" required></textarea>
+                    </div>
+                    <div class="col-12">
+                        <input type="text" class="form-control" placeholder="File Path or URL" id="filePath" />
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-primary w-100" type="submit">Create Assignment</button>
+                    </div>
+                    <div id="assignMsg" class="text-success text-center mt-2"></div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Modal for Viewing Submissions -->
+        <div class="modal fade" id="submissionModal" tabindex="-1" aria-labelledby="submissionModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="submissionModalLabel">Student Submissions</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <table class="table table-bordered" id="submissionTable">
+                            <thead>
+                                <tr>
+                                    <th>Student Name</th>
+                                    <th>File</th>
+                                    <th>Submitted At</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+
+                        <!-- Dynamic Assessment Submission Container -->
+                        <div id="assessmentContainer" class="dashboard-card" style="display:none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+       
+
+        <!-- Performance Charts Section -->
+        <div class="dashboard-card p-4 mb-4 shadow-sm rounded">
+            <div id="chartSection" class="row g-4"></div>
+        </div>
+    </div>
+
+    @section Scripts {
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+            const apiBase = "https://localhost:7266/api/AssignmentApi";
+
+            $(function () {
+                $.get(`${apiBase}/students`, function (students) {
+                    students.forEach(s => {
+                        $('#studentList').append(`<li class="list-group-item">${s.fullName} (${s.email})</li>`);
+                    });
+                });
+
+                function loadAssignments() {
+                    $.get(`${apiBase}/get-assignment`, function (assignments) {
+                        const tbody = $('#assignmentTable tbody');
+                        tbody.empty();
+                        if (assignments.length === 0) {
+                            tbody.append('<tr><td colspan="4" class="text-center">No assignments found.</td></tr>');
+                            return;
+                        }
+
+                        assignments.forEach(a => {
+                            tbody.append(`
+                                <tr>
+                                    <td>${a.title}</td>
+                                    <td>${a.description}</td>
+                                    <td>${new Date(a.dueDate).toLocaleString('en-GB', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true
+                                    })}</td>
+                                    <td><button class="btn btn-sm btn-info view-submissions" data-id="${a.assignmentId}" data-title="${a.title}">View Submissions</button></td>
+                                </tr>
+                            `);
+                        });
+                    }).fail(() => alert("Failed to load assignments."));
+                }
+
+                loadAssignments();
+
+                $('#toggleAssignmentForm').click(() => {
+                    $('#assignmentForm').toggle();
+                    $('#assignMsg').text('');
+                });
+
+                $('#assignmentForm').submit(function (e) {
+                    e.preventDefault();
+                    const assignment = {
+                        title: $('#title').val(),
+                        description: $('#description').val(),
+                        dueDate: $('#dueDate').val(),
+                        filePath: $('#filePath').val()
+                    };
+                    $.ajax({
+                        url: `${apiBase}/create`,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(assignment)
+                    }).done(res => {
+                        $('#assignMsg').text(res.message);
+                        $('#assignmentForm')[0].reset();
+                        loadAssignments();
+                    }).fail(err => alert("Error: " + (err.responseJSON?.error || "Unknown")));
+                });
+
+                $(document).on('click', '.view-submissions', function () {
+                    const assignmentId = $(this).data('id');
+                    const title = $(this).data('title');
+
+                    $.get(`${apiBase}/get-submissions/${assignmentId}`, function (students) {
+                        const tbody = $('#submissionTable tbody');
+                        tbody.empty();
+                        students.forEach(s => {
+                            tbody.append(`
+                                <tr>
+                                    <td class='studentName'>${s.studentName}</td>
+                                    <td>${s.filePath}</td>
+                                    <td>${new Date(s.submittedAt).toLocaleString('en-GB', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true
+                                    })}</td>
+                                    <td><button class="btn btn-sm btn-success fill-assessment" data-assignment="${assignmentId}" data-student="${s.studentId } data-studentName="${s.studentName}">Fill Assessment</button></td>
+                                </tr>
+                            `);
+                        });
+                        $('#submissionModalLabel').text(`Submissions for: ${title}`);
+                        const modal = new bootstrap.Modal(document.getElementById('submissionModal'));
+                        modal.show();
+                    });
+                });
+
+             $(document).on('click', '.fill-assessment', function () {
+                const aId = $(this).data('assignment');
+                const sId = $(this).data('student');
+                const sName = $(this).closest('tr').find('td:first').text(); //
+
+                const formHtml = `
+                    <hr />
+                    <h5>📑 Submit Assessment for <strong>${sName}</strong></h5>
+                    <form id="assessmentForm">
+                        <div class="row g-3">
+                            <input type="hidden" id="assignmentId" value="${aId}" />
+                            <input type="hidden" id="studentId" value="${sId}" />
+
+                            <div class="col-12">
+                                <label for="remarks" class="form-label">Remarks</label>
+                                <textarea class="form-control" placeholder="Remarks" id="remarks" rows="2"></textarea>
+                            </div>
+                            <div class="col-12">
+                                <h6 class="mt-3">Grading Criteria</h6>
+                                <div id="criteriaInputs">
+                                    <div class="input-group mb-2">
+                                        <input type="text" class="form-control" placeholder="Criterion" name="criterion" />
+                                        <input type="number" class="form-control" placeholder="Score" name="score" min="1" max="10" />
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-secondary btn-sm mb-2" id="addCriterion">+ Add Criterion</button>
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-success w-100" type="submit">Submit Assessment</button>
+                            </div>
+                            <div id="assessmentMsg" class="text-success text-center mt-2"></div>
+                        </div>
+                    </form>
+                `;
+
+                $('#assessmentContainer').html(formHtml).show();
+            });
+
+
+                $(document).on('click', '#addCriterion', function () {
+                    $('#criteriaInputs').append(`
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control" placeholder="Criterion" name="criterion" />
+                            <input type="number" class="form-control" placeholder="Score" name="score" min="1" max="10" />
+                        </div>
+                    `);
+                });
+
+                            $(document).on('submit', '#assessmentForm', function (e) {
+                e.preventDefault();
+
+                const criteria = [];
+                $('#criteriaInputs .input-group').each(function () {
+                    const crit = $(this).find('input[name="criterion"]').val();
+                    const score = parseInt($(this).find('input[name="score"]').val());
+                    if (crit && !isNaN(score)) {
+                        criteria.push({ criterion: crit, score: score });
+                    }
+                });
+
+                const assignmentId = parseInt($('#studentId').val());
+                const studentId = parseInt($('#assignmentId').val());
+
+                const assessment = {
+                    assignmentId: assignmentId,
+                    studentId: studentId,
+                    remarks: $('#remarks').val(),
+                    criteria: criteria
+                };
+
+               
+
+                $.ajax({
+                    url: `${apiBase}/submit-assessment`,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(assessment)
+                }).done(res => $('#assessmentMsg').text(res.message))
+                  .fail(err => alert("Error: " + (err.responseJSON?.error || "Unknown error")));
+            });
+
+
+                $.get(`${apiBase}/performance-data`, function (data) {
+                    if (!data || data.length === 0) {
+                        alert("No performance data available.");
+                        return;
+                    }
+
+                    const studentScoresMap = {};
+
+                    data.forEach(d => {
+                        studentScoresMap[d.studentName] = (studentScoresMap[d.studentName] || 0) + d.score;
+                    });
+
+                    const chartSection = $('#chartSection');
+                    chartSection.empty();
+
+                    const html = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="dashboard-card">
+                                    <h5 class="text-center">Total Score per Student (Line Chart)</h5>
+                                    <canvas id="lineChart" height="310"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="dashboard-card">
+                                    <h5 class="text-center">Total Score per Student (Pie Chart)</h5>
+                                    <canvas id="pieChart" height="310"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    chartSection.append(html);
+
+                    const studentNames = Object.keys(studentScoresMap);
+                    const studentScores = Object.values(studentScoresMap);
+                    const colors = studentNames.map(() => `hsl(${Math.random() * 360}, 60%, 70%)`);
+
+                    new Chart(document.getElementById('lineChart'), {
+                        type: 'line',
+                        data: {
+                            labels: studentNames,
+                            datasets: [{
+                                label: "Total Score",
+                                data: studentScores,
+                                borderColor: "#0d6efd",
+                                backgroundColor: "rgba(13,110,253,0.1)",
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        }
+                    });
+
+                    new Chart(document.getElementById('pieChart'), {
+                        type: 'pie',
+                        data: {
+                            labels: studentNames,
+                            datasets: [{
+                                data: studentScores,
+                                backgroundColor: colors
+                            }]
+                        }
+                    });
+                }).fail(() => alert("Failed to load performance data."));
+            });
+        </script>
+    }
+</body>
+</html>
